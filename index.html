@@ -31,6 +31,8 @@
   .status{font-size:12px;margin:0 0 18px;padding:8px 12px;border-radius:8px;background:#fff;border:1px solid var(--line);color:var(--mut)}
   .status.ok{color:var(--green);border-color:#bfe3cb;background:#f0faf3}
   .status.warn{color:var(--amber);border-color:#e7d9a8;background:#fdf7ec}
+  .field{display:inline-flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mut);font-weight:600;margin:0 0 18px}
+  .field input{font:inherit;font-weight:500;color:var(--ink);padding:8px 10px;border:1px solid var(--line);border-radius:8px}
   .note{color:var(--mut);font-size:12px;margin-top:28px;border-top:1px solid var(--line);padding-top:14px}
 </style>
 </head>
@@ -40,6 +42,10 @@
   <p class="sub">Drop in this month&rsquo;s raw <b>PAI</b>, <b>CDS</b>, and <b>Switch</b> exports. The tool converts them into the Master Revenue format &mdash; same logic, validated against May to the cent. Nothing is uploaded anywhere; it all runs in your browser.</p>
 
   <div id="lookupStatus" class="status">Loading investor list&hellip;</div>
+
+  <label class="field">Reporting month &mdash; stamps the Date on every converted row
+    <input type="month" id="repMonth">
+  </label>
 
   <div id="drop" onclick="document.getElementById('file').click()">
     <p style="font-size:32px;margin:0">&#8681;</p>
@@ -89,7 +95,7 @@ const REV_COLS = [
   "Business Total Income", "Date", "Charge Code Name"
 ];
 
-const DATE_VALUE = "05/01/2026";
+let DATE_VALUE = "05/01/2026";
 
 // last-4 -> investor (operating account) name, baked from
 // ref_may_lookup_last4_investor.csv (cols "Last 4","Name").
@@ -418,7 +424,17 @@ const fileInput = document.getElementById('file');
 const results = document.getElementById('results');
 const actions = document.getElementById('actions');
 const lookupStatus = document.getElementById('lookupStatus');
+const repMonth = document.getElementById('repMonth');
 let ALL_ROWS = [];
+
+// Default the reporting-month picker to the current month.
+(function(){ const d = new Date(); repMonth.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); })();
+function reportingDate(){
+  const ym = (repMonth.value || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(ym)) return null;
+  const parts = ym.split('-');
+  return parts[1] + '/01/' + parts[0];   // MM/01/YYYY — matches the Revenue tab Date format
+}
 
 // ---- Live investor lookup from Supabase (read-only, RLS-protected) ----
 const SUPA_URL = "https://jsgmyfpckhgmhyivivoi.supabase.co";
@@ -459,6 +475,9 @@ function pickSheet(wb, name){
 async function handleFiles(fileList){
   const files = Array.from(fileList).filter(f => /\.(xls|xlsx|xlsm)$/i.test(f.name));
   if (!files.length){ alert('Please drop PAI / CDS / Switch .xls, .xlsx or .xlsm files.'); return; }
+  const rd = reportingDate();
+  if (!rd){ alert('Please choose a reporting month first.'); return; }
+  DATE_VALUE = rd;   // stamp every converted row's Date with the chosen reporting month
   ALL_ROWS = [];
   const perFile = [];
   for (const f of files){
