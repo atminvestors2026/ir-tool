@@ -47,6 +47,18 @@
     <input type="month" id="repMonth">
   </label>
 
+  <div id="pullPanel" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 18px">
+    <div style="font-weight:700;margin-bottom:4px">Pull processor reports (PAI / CDS / Switch)</div>
+    <p style="color:var(--mut);font-size:12px;margin:0 0 10px">Runs the pulls on the server for the reporting month above, uploads them to Google Drive, then loads them here to consolidate. Enter the team passphrase.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="password" id="pullPass" placeholder="passphrase" style="font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+      <button class="btn" id="runPulls">&#9654;&nbsp; Run Pulls</button>
+      <button class="btn" id="loadPulled" style="background:var(--green);display:none">&#8681;&nbsp; Load &amp; consolidate</button>
+      <span id="pullMsg" style="font-size:12px;color:var(--mut)"></span>
+    </div>
+    <div id="pullManifest" style="margin-top:10px"></div>
+  </div>
+
   <div id="drop" onclick="document.getElementById('file').click()">
     <p style="font-size:32px;margin:0">&#8681;</p>
     <p><b>Drop processor files here</b> or click to choose</p>
@@ -547,6 +559,83 @@ document.getElementById('dl').onclick = () => {
 document.getElementById('copy').onclick = async () => {
   await navigator.clipboard.writeText(toTSV());
   const b=document.getElementById('copy'); const t=b.textContent; b.textContent='Copied!'; setTimeout(()=>b.textContent=t,1500);
+};
+
+// ---- Manual pull trigger (calls this app's server, which holds the VPS token) ----
+const pullPass = document.getElementById('pullPass');
+const pullMsg = document.getElementById('pullMsg');
+const pullManifest = document.getElementById('pullManifest');
+const runPullsBtn = document.getElementById('runPulls');
+const loadPulledBtn = document.getElementById('loadPulled');
+function ymNow(){ const ym=(repMonth.value||'').trim(); return /^\d{4}-\d{2}$/.test(ym)?ym:null; }
+function setPullMsg(t, cls){ pullMsg.textContent=t; pullMsg.style.color = cls==='err'?'#c0392b':(cls==='ok'?'#1a7f37':'#6b7280'); }
+
+runPullsBtn.onclick = async () => {
+  const ym = ymNow(); if(!ym){ alert('Choose a reporting month first.'); return; }
+  if(!pullPass.value){ alert('Enter the passphrase.'); return; }
+  runPullsBtn.disabled = true; loadPulledBtn.style.display='none'; pullManifest.innerHTML='';
+  setPullMsg('Starting pull…');
+  try {
+    const r = await fetch('/run-pulls', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ passphrase: pullPass.value, ym }) });
+    if (r.status===401){ setPullMsg('Wrong passphrase.','err'); runPullsBtn.disabled=false; return; }
+    if (r.status!==202 && r.status!==409 && !r.ok){ const j=await r.json().catch(()=>({})); setPullMsg('Could not start: '+(j.error||r.status),'err'); runPullsBtn.disabled=false; return; }
+    setPullMsg('Pull running… this can take a few minutes.');
+    await pollUntilDone();
+    await showManifest(ym);
+    setPullMsg('Pull finished — review the files below, then Load & consolidate.','ok');
+    loadPulledBtn.style.display='inline-block';
+  } catch(e){ setPullMsg('Error: '+(e.message||e),'err'); }
+  runPullsBtn.disabled = false;
+};
+function pollUntilDone(){
+  return new Promise(resolve=>{
+    const t = setInterval(async ()=>{
+      try { const r = await fetch('/pull-status'); const j = await r.json();
+        if (j.state && j.state.running===false){ clearInterval(t); resolve(); } } catch(e){}
+    }, 4000);
+  });
+}
+async function showManifest(ym){
+  try {
+    const r = await fetch('/pull-manifest?ym='+encodeURIComponent(ym)); const j = await r.json();
+    if (!j.processors){ pullManifest.innerHTML='<span class="warn">No manifest yet.</span>'; return; }
+    let html='<table class="sum"><thead><tr><th>Processor</th><th>Status</th><th>Files</th></tr></thead><tbody>';
+    for (const p of ['PAI','CDS','Switch']){
+      const o=j.processors[p]||{status:'none',files:[]};
+      const badge = o.status==='complete'?'&#10003; complete':(o.status==='partial'?'<span class="warn">partial</span>':'<span class="err">none</span>');
+      html+='<tr><td>'+p+'</td><td>'+badge+'</td><td>'+((o.files||[]).length)+'</td></tr>';
+    }
+    pullManifest.innerHTML = html+'</tbody></table>';
+  } catch(e){ pullManifest.innerHTML='<span class="err">Manifest error: '+esc(String(e.message||e))+'</span>'; }
+}
+loadPulledBtn.onclick = async () => {
+  const ym = ymNow(); const rd = reportingDate();
+  if(!ym || !rd){ alert('Choose a reporting month first.'); return; }
+  DATE_VALUE = rd;
+  setPullMsg('Loading pulled files…');
+  try {
+    const lr = await fetch('/pull-files?ym='+encodeURIComponent(ym)); const lj = await lr.json();
+    const list = (lj.files||[]);
+    if (!list.length){ setPullMsg('No pulled files found for this month.','err'); return; }
+    ALL_ROWS=[]; const perFile=[];
+    for (const f of list){
+      try {
+        const fr = await fetch('/pull-file?ym='+encodeURIComponent(ym)+'&proc='+encodeURIComponent(f.proc)+'&name='+encodeURIComponent(f.name));
+        const buf = await fr.arrayBuffer();
+        const wb = XLSX.read(buf,{type:'array'});
+        const ws = wb.Sheets[pickSheet(wb, f.name)];
+        const rows2D = XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+        const out = transformFile(f.name, rows2D);
+        const inc = out.reduce((s,r)=>s+(parseFloat(r['Business Total Income'])||0),0);
+        const na = out.filter(r=>r['Bill to Business']==='#N/A').length;
+        ALL_ROWS = ALL_ROWS.concat(out);
+        perFile.push({name:f.name, rows:out.length, inc, na, err:null});
+      } catch(e){ perFile.push({name:f.name, rows:0, inc:0, na:0, err:String(e.message||e)}); }
+    }
+    render(perFile);
+    setPullMsg('Consolidated '+list.length+' pulled file(s).','ok');
+  } catch(e){ setPullMsg('Load error: '+(e.message||e),'err'); }
 };
 
 ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
