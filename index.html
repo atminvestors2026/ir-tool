@@ -688,8 +688,34 @@ function s12PollDone(){
     }, 4000);
   });
 }
+// PAI's Simple Summary CSV quotes fields (some hold commas, e.g. "$2,215.03").
+// Parse it properly and copy as TAB-separated so it pastes straight into the LU
+// tab as clean columns — no "split by comma" step, and comma-dollar values stay intact.
+function s12ParseCSV(text){
+  const rows=[]; let row=[], field='', i=0, inq=false;
+  while(i<text.length){
+    const c=text[i];
+    if(inq){
+      if(c==='"'){ if(text[i+1]==='"'){ field+='"'; i+=2; continue; } inq=false; i++; continue; }
+      field+=c; i++; continue;
+    }
+    if(c==='"'){ inq=true; i++; continue; }
+    if(c===','){ row.push(field); field=''; i++; continue; }
+    if(c==='\r'){ i++; continue; }
+    if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
+    field+=c; i++;
+  }
+  if(field!=='' || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function s12ToTSV(text){
+  return s12ParseCSV(text)
+    .filter(r => r.length && r.some(f => String(f).trim() !== ''))
+    .map(r => r.map(f => String(f).replace(/[\t\r\n]/g,' ')).join('\t'))
+    .join('\n');
+}
 document.getElementById('s12Copy').onclick = async () => {
-  await navigator.clipboard.writeText(S12_CSV);
+  await navigator.clipboard.writeText(s12ToTSV(S12_CSV));
   const b=document.getElementById('s12Copy'); const t=b.textContent; b.textContent='Copied!'; setTimeout(()=>b.textContent=t,1500);
 };
 document.getElementById('s12Dl').onclick = () => {
