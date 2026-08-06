@@ -71,6 +71,26 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(r.status, { 'Content-Type': r.headers['content-type'] || 'application/octet-stream' });
       return res.end(r.buf);
     }
+    // ---- Series 12 Simple Summary: browser -> here (passphrase + token) -> VPS ----
+    if (req.method === 'POST' && u.pathname === '/series12-summary') {
+      let body = ''; for await (const c of req) body += c;
+      let j = {}; try { j = JSON.parse(body || '{}'); } catch (e) {}
+      if (!APP_PASSPHRASE || j.passphrase !== APP_PASSPHRASE) return json(res, 401, { error: 'wrong passphrase' });
+      const month = j.ym ? shortMonth(j.ym) : null;
+      if (!month) return json(res, 400, { error: 'bad month format (expect YYYY-MM)' });
+      const r = await vps('POST', '/series12-summary', null, { month });
+      return json(res, r.status, parse(r.buf));
+    }
+    if (req.method === 'GET' && u.pathname === '/series12-summary-status') {
+      const r = await vps('GET', '/series12-summary-status'); return json(res, r.status, parse(r.buf));
+    }
+    if (req.method === 'GET' && u.pathname === '/series12-summary-file') {
+      const short = shortMonth(u.searchParams.get('ym'));
+      if (!short) return json(res, 400, { error: 'ym required (YYYY-MM)' });
+      const r = await vps('GET', '/series12-summary-file', { month: short });
+      return json(res, r.status, parse(r.buf));
+    }
+
     // default: serve the app
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);

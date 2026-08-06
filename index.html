@@ -59,6 +59,23 @@
     <div id="pullManifest" style="margin-top:10px"></div>
   </div>
 
+  <div id="s12Panel" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 18px">
+    <div style="font-weight:700;margin-bottom:4px">Series 12 &mdash; Simple Summary (PAI)</div>
+    <p style="color:var(--mut);font-size:12px;margin:0 0 10px">Separate from the consolidation above. Pulls the Series 12 Simple Summary from PAI for the reporting month, then hands it back to copy or download &mdash; paste it into the &ldquo;LU - Simple Summary Report&rdquo; tab of the Series 12 breakdown sheet.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="password" id="s12Pass" placeholder="passphrase" style="font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+      <button class="btn" id="runS12">&#9654;&nbsp; Pull Series 12 Simple Summary</button>
+      <span id="s12Msg" style="font-size:12px;color:var(--mut)"></span>
+    </div>
+    <div id="s12Out" style="margin-top:12px;display:none">
+      <div style="display:flex;gap:10px;margin-bottom:6px">
+        <button class="btn" id="s12Copy" style="background:var(--green)">&#128203; Copy</button>
+        <button class="btn" id="s12Dl">&#11015; Download CSV</button>
+      </div>
+      <textarea id="s12Text" readonly onclick="this.select()" style="width:100%;height:220px;font:12px/1.4 monospace;border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
+    </div>
+  </div>
+
   <div id="drop" onclick="document.getElementById('file').click()">
     <p style="font-size:32px;margin:0">&#8681;</p>
     <p><b>Drop processor files here</b> or click to choose</p>
@@ -636,6 +653,48 @@ loadPulledBtn.onclick = async () => {
     render(perFile);
     setPullMsg('Consolidated '+list.length+' pulled file(s).','ok');
   } catch(e){ setPullMsg('Load error: '+(e.message||e),'err'); }
+};
+
+// ---- Series 12 Simple Summary pull (calls this app's server, which holds the VPS token) ----
+const s12Pass=document.getElementById('s12Pass'), s12Msg=document.getElementById('s12Msg'),
+      runS12=document.getElementById('runS12'), s12Out=document.getElementById('s12Out'),
+      s12Text=document.getElementById('s12Text');
+let S12_CSV='';
+function setS12(t,cls){ s12Msg.textContent=t; s12Msg.style.color = cls==='err'?'#c0392b':(cls==='ok'?'#1a7f37':'#6b7280'); }
+runS12.onclick = async () => {
+  const ym = ymNow(); if(!ym){ alert('Choose a reporting month first.'); return; }
+  if(!s12Pass.value){ alert('Enter the passphrase.'); return; }
+  runS12.disabled=true; s12Out.style.display='none'; setS12('Starting Series 12 pull…');
+  try {
+    const r = await fetch('/series12-summary',{ method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ passphrase:s12Pass.value, ym }) });
+    if (r.status===401){ setS12('Wrong passphrase.','err'); runS12.disabled=false; return; }
+    if (r.status!==202 && r.status!==409 && !r.ok){ const j=await r.json().catch(()=>({})); setS12('Could not start: '+(j.error||r.status),'err'); runS12.disabled=false; return; }
+    setS12('Pulling from PAI… this can take a minute.');
+    await s12PollDone();
+    const fr = await fetch('/series12-summary-file?ym='+encodeURIComponent(ym));
+    const fj = await fr.json().catch(()=>({}));
+    if (!fr.ok || !fj.ok || !fj.csv){ setS12('Pull finished but no file came back: '+(fj.error||fr.status)+'. Try again in a moment.','err'); runS12.disabled=false; return; }
+    S12_CSV = fj.csv; s12Text.value = S12_CSV; s12Out.style.display='block';
+    setS12('Done — copy this into the LU - Simple Summary Report tab.','ok');
+  } catch(e){ setS12('Error: '+(e.message||e),'err'); }
+  runS12.disabled=false;
+};
+function s12PollDone(){
+  return new Promise(resolve=>{
+    const t = setInterval(async ()=>{
+      try { const r = await fetch('/series12-summary-status'); const j = await r.json();
+        if (j.state && j.state.running===false){ clearInterval(t); resolve(); } } catch(e){}
+    }, 4000);
+  });
+}
+document.getElementById('s12Copy').onclick = async () => {
+  await navigator.clipboard.writeText(S12_CSV);
+  const b=document.getElementById('s12Copy'); const t=b.textContent; b.textContent='Copied!'; setTimeout(()=>b.textContent=t,1500);
+};
+document.getElementById('s12Dl').onclick = () => {
+  const blob=new Blob([S12_CSV],{type:'text/csv'}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='Series12_Simple_Summary.csv'; a.click();
 };
 
 ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
