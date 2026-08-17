@@ -76,6 +76,28 @@
     </div>
   </div>
 
+  <div id="dailyPanel" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 18px">
+    <div style="font-weight:700;margin-bottom:4px">Daily Transactions (PAI / CDS / Switch / DNS)</div>
+    <p style="color:var(--mut);font-size:12px;margin:0 0 10px">Fetches daily transaction reports from each processor portal for the selected date and uploads them to the watch folder. The 6 PM n8n automation processes them from there.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label style="font-size:12px;color:var(--mut);font-weight:600">Date
+        <input type="date" id="dailyDate" style="font:inherit;font-weight:500;color:var(--ink);padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-left:6px">
+      </label>
+    </div>
+    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label style="font-size:13px"><input type="checkbox" id="dailyPAI" checked> PAI</label>
+      <label style="font-size:13px"><input type="checkbox" id="dailyCDS" checked> CDS</label>
+      <label style="font-size:13px"><input type="checkbox" id="dailySwitch" checked> Switch</label>
+      <label style="font-size:13px"><input type="checkbox" id="dailyDNS" checked> DNS</label>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="password" id="dailyPass" placeholder="passphrase" style="font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+      <button class="btn" id="runDaily">&#9654;&nbsp; Fetch &amp; Upload</button>
+      <span id="dailyMsg" style="font-size:12px;color:var(--mut)"></span>
+    </div>
+    <div id="dailyResult" style="margin-top:10px"></div>
+  </div>
+
   <div id="drop" onclick="document.getElementById('file').click()">
     <p style="font-size:32px;margin:0">&#8681;</p>
     <p><b>Drop processor files here</b> or click to choose</p>
@@ -727,6 +749,92 @@ document.getElementById('s12Dl').onclick = () => {
 ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
 drop.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
 fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+// ---- Daily Transactions panel ----
+(function(){
+  const dailyDate = document.getElementById('dailyDate');
+  const dailyMsg = document.getElementById('dailyMsg');
+  const dailyResult = document.getElementById('dailyResult');
+  const runDailyBtn = document.getElementById('runDaily');
+  const dailyPass = document.getElementById('dailyPass');
+  // Default to yesterday
+  const yd = new Date(); yd.setDate(yd.getDate()-1);
+  dailyDate.value = yd.getFullYear()+'-'+String(yd.getMonth()+1).padStart(2,'0')+'-'+String(yd.getDate()).padStart(2,'0');
+
+  function setDailyMsg(t,cls){ dailyMsg.textContent=t; dailyMsg.style.color=cls==='err'?'#c0392b':(cls==='ok'?'#1a7f37':'#6b7280'); }
+
+  function selectedProcessors(){
+    const procs=[];
+    if(document.getElementById('dailyPAI').checked) procs.push('PAI');
+    if(document.getElementById('dailyCDS').checked) procs.push('CDS');
+    if(document.getElementById('dailySwitch').checked) procs.push('Switch');
+    if(document.getElementById('dailyDNS').checked) procs.push('DNS');
+    return procs;
+  }
+
+  runDailyBtn.onclick = async () => {
+    const date = dailyDate.value;
+    if(!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)){ alert('Pick a date.'); return; }
+    if(!dailyPass.value){ alert('Enter the passphrase.'); return; }
+    const procs = selectedProcessors();
+    if(!procs.length){ alert('Select at least one processor.'); return; }
+    runDailyBtn.disabled=true; dailyResult.innerHTML='';
+    setDailyMsg('Starting daily pull…');
+    try {
+      const r = await fetch('/run-daily', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ passphrase:dailyPass.value, date, only:procs.join(',') }) });
+      if(r.status===401){ setDailyMsg('Wrong passphrase.','err'); runDailyBtn.disabled=false; return; }
+      const j = await r.json().catch(()=>({}));
+      if(r.status!==202){ setDailyMsg('Could not start: '+(j.error||r.status),'err'); runDailyBtn.disabled=false; return; }
+      setDailyMsg('Running… this can take a few minutes.');
+      await pollDailyDone();
+      setDailyMsg('Daily pull finished.','ok');
+      await showDailyResult(date);
+    } catch(e){ setDailyMsg('Error: '+(e.message||e),'err'); }
+    runDailyBtn.disabled=false;
+  };
+
+  function pollDailyDone(){
+    return new Promise(resolve=>{
+      const t=setInterval(async()=>{
+        try {
+          const r=await fetch('/daily-status'); const j=await r.json();
+          if(j.state && j.state.running===false){ clearInterval(t); resolve(); }
+        } catch(e){}
+      },4000);
+    });
+  }
+
+  async function showDailyResult(date){
+    try {
+      const r=await fetch('/daily-manifest?date='+encodeURIComponent(date));
+      if(!r.ok){ dailyResult.innerHTML='<span class="warn">No manifest available yet.</span>'; return; }
+      const j=await r.json();
+      let html='<table class="sum"><thead><tr><th>Processor</th><th>Login</th><th>Status</th><th>Detail</th></tr></thead><tbody>';
+      let hasRows=false;
+      for(const p of ['PAI','CDS','Switch','DNS']){
+        const pr=j.processors&&j.processors[p];
+        if(!pr) continue;
+        const logins=pr.logins||[];
+        if(!logins.length){
+          html+='<tr><td>'+p+'</td><td colspan="3" style="color:var(--mut)">skipped</td></tr>';
+          hasRows=true;
+          continue;
+        }
+        for(const l of logins){
+          hasRows=true;
+          const ok=l.status==='ok';
+          const badge=ok?'<span style="color:var(--green)">&#10003; ok</span>':'<span class="err">&#10007; fail</span>';
+          const detail=ok?(l.file||''):'<span class="err">'+esc(l.error||'unknown error')+'</span>';
+          html+='<tr><td>'+p+'</td><td>'+esc(l.login)+'</td><td>'+badge+'</td><td style="font-size:12px">'+detail+'</td></tr>';
+        }
+      }
+      if(!hasRows) html+='<tr><td colspan="4" style="color:var(--mut)">No results</td></tr>';
+      html+='</tbody></table>';
+      dailyResult.innerHTML=html;
+    } catch(e){ dailyResult.innerHTML='<span class="err">'+esc(String(e.message||e))+'</span>'; }
+  }
+})();
 
 </script>
 </body>

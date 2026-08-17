@@ -90,7 +90,23 @@ const server = http.createServer(async (req, res) => {
       const r = await vps('GET', '/series12-summary-file', { month: short });
       return json(res, r.status, parse(r.buf));
     }
-
+    // ---- daily transaction pulls ----
+    if (req.method === 'POST' && u.pathname === '/run-daily') {
+      let body = ''; for await (const c of req) body += c;
+      let j = {}; try { j = JSON.parse(body || '{}'); } catch (e) {}
+      if (!APP_PASSPHRASE || j.passphrase !== APP_PASSPHRASE) return json(res, 401, { error: 'wrong passphrase' });
+      if (!j.date || !/^\d{4}-\d{2}-\d{2}$/.test(j.date)) return json(res, 400, { error: 'date required (YYYY-MM-DD)' });
+      const r = await vps('POST', '/run-daily', null, { date: j.date, only: j.only || null });
+      return json(res, r.status, parse(r.buf));
+    }
+    if (req.method === 'GET' && u.pathname === '/daily-status') {
+      const r = await vps('GET', '/daily-status'); return json(res, r.status, parse(r.buf));
+    }
+    if (req.method === 'GET' && u.pathname === '/daily-manifest') {
+      const date = u.searchParams.get('date');
+      const r = await vps('GET', '/daily-manifest', date ? { date } : null);
+      return json(res, r.status, parse(r.buf));
+    }
     // default: serve the app
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);
