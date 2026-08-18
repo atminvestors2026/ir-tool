@@ -3,13 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>IR Consolidation Tool</title>
+<title>ATM Investors — Reports</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-  :root{ --ink:#1f2328; --mut:#6b7280; --line:#e5e7eb; --green:#1a7f37; --amber:#b3791a; --bg:#f7f8fa; }
+  :root{ --ink:#1f2328; --mut:#6b7280; --line:#e5e7eb; --green:#1a7f37; --amber:#b3791a; --bg:#f7f8fa; --sidebar:#1b1f23; --sidebar-w:220px; }
   *{box-sizing:border-box}
-  body{font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg);margin:0;padding:32px;}
-  .wrap{max-width:960px;margin:0 auto;}
+  body{font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg);margin:0;padding:0;}
+
+  /* ---- sidebar ---- */
+  .sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;background:var(--sidebar);color:#fff;display:flex;flex-direction:column;z-index:100}
+  .sidebar-brand{padding:20px 18px 16px;font-size:15px;font-weight:700;line-height:1.3;border-bottom:1px solid #30363d}
+  .sidebar-brand span{display:block;font-size:11px;font-weight:400;color:#8b949e;margin-top:2px}
+  .sidebar-nav{flex:1;padding:12px 0}
+  .sidebar-nav a{display:flex;align-items:center;gap:10px;padding:10px 18px;color:#c9d1d9;text-decoration:none;font-size:14px;font-weight:500;border-left:3px solid transparent;transition:.12s}
+  .sidebar-nav a:hover{color:#fff;background:#21262d}
+  .sidebar-nav a.active{color:#fff;background:#21262d;border-left-color:var(--green)}
+
+  /* ---- main ---- */
+  .main{margin-left:var(--sidebar-w);padding:32px;min-height:100vh}
+  .main .wrap{max-width:960px;margin:0 auto}
+  .view{display:none}
+  .view.active{display:block}
+
+  /* ---- existing component styles ---- */
   h1{font-size:22px;margin:0 0 4px}
   .sub{color:var(--mut);margin:0 0 24px}
   #drop{border:2px dashed #c3c9d2;border-radius:14px;background:#fff;padding:40px;text-align:center;cursor:pointer;transition:.15s}
@@ -34,93 +50,131 @@
   .field{display:inline-flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mut);font-weight:600;margin:0 0 18px}
   .field input{font:inherit;font-weight:500;color:var(--ink);padding:8px 10px;border:1px solid var(--line);border-radius:8px}
   .note{color:var(--mut);font-size:12px;margin-top:28px;border-top:1px solid var(--line);padding-top:14px}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 18px}
+  .panel-title{font-weight:700;margin-bottom:4px}
+  .panel-desc{color:var(--mut);font-size:12px;margin:0 0 10px}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Investor Report &mdash; Consolidation Tool</h1>
-  <p class="sub">Drop in this month&rsquo;s raw <b>PAI</b>, <b>CDS</b>, and <b>Switch</b> exports. The tool converts them into the Master Revenue format &mdash; same logic, validated against May to the cent. Nothing is uploaded anywhere; it all runs in your browser.</p>
 
-  <div id="lookupStatus" class="status">Loading investor list&hellip;</div>
-
-  <label class="field">Reporting month &mdash; stamps the Date on every converted row
-    <input type="month" id="repMonth">
-  </label>
-
-  <div id="pullPanel" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 18px">
-    <div style="font-weight:700;margin-bottom:4px">Pull processor reports (PAI / CDS / Switch)</div>
-    <p style="color:var(--mut);font-size:12px;margin:0 0 10px">Runs the pulls on the server for the reporting month above, uploads them to Google Drive, then loads them here to consolidate. Enter the team passphrase.</p>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <input type="password" id="pullPass" placeholder="passphrase" style="font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
-      <button class="btn" id="runPulls">&#9654;&nbsp; Run Pulls</button>
-      <button class="btn" id="loadPulled" style="background:var(--green);display:none">&#8681;&nbsp; Load &amp; consolidate</button>
-      <span id="pullMsg" style="font-size:12px;color:var(--mut)"></span>
-    </div>
-    <div id="pullManifest" style="margin-top:10px"></div>
-  </div>
-
-  <div id="s12Panel" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 18px">
-    <div style="font-weight:700;margin-bottom:4px">Series 12 &mdash; Simple Summary (PAI)</div>
-    <p style="color:var(--mut);font-size:12px;margin:0 0 10px">Separate from the consolidation above. Pulls the Series 12 Simple Summary from PAI for the reporting month, then hands it back to copy or download &mdash; paste it into the &ldquo;LU - Simple Summary Report&rdquo; tab of the Series 12 breakdown sheet.</p>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <input type="password" id="s12Pass" placeholder="passphrase" style="font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
-      <button class="btn" id="runS12">&#9654;&nbsp; Pull Series 12 Simple Summary</button>
-      <span id="s12Msg" style="font-size:12px;color:var(--mut)"></span>
-    </div>
-    <div id="s12Out" style="margin-top:12px;display:none">
-      <div style="display:flex;gap:10px;margin-bottom:6px">
-        <button class="btn" id="s12Copy" style="background:var(--green)">&#128203; Copy</button>
-        <button class="btn" id="s12Dl">&#11015; Download CSV</button>
-      </div>
-      <textarea id="s12Text" readonly onclick="this.select()" style="width:100%;height:220px;font:12px/1.4 monospace;border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
-    </div>
-  </div>
-
-  <div id="dailyPanel" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 18px">
-    <div style="font-weight:700;margin-bottom:4px">Daily Transactions (PAI / CDS / Switch / DNS)</div>
-    <p style="color:var(--mut);font-size:12px;margin:0 0 10px">Fetches daily transaction reports from each processor portal for the selected date and uploads them to the watch folder. The 6 PM n8n automation processes them from there.</p>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <label style="font-size:12px;color:var(--mut);font-weight:600">Date
-        <input type="date" id="dailyDate" style="font:inherit;font-weight:500;color:var(--ink);padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-left:6px">
-      </label>
-    </div>
-    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <label style="font-size:13px"><input type="checkbox" id="dailyPAI" checked> PAI</label>
-      <label style="font-size:13px"><input type="checkbox" id="dailyCDS" checked> CDS</label>
-      <label style="font-size:13px"><input type="checkbox" id="dailySwitch" checked> Switch</label>
-      <label style="font-size:13px"><input type="checkbox" id="dailyDNS" checked> DNS</label>
-    </div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <input type="password" id="dailyPass" placeholder="passphrase" style="font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
-      <button class="btn" id="runDaily">&#9654;&nbsp; Fetch &amp; Upload</button>
-      <span id="dailyMsg" style="font-size:12px;color:var(--mut)"></span>
-    </div>
-    <div id="dailyResult" style="margin-top:10px"></div>
-  </div>
-
-  <div id="drop" onclick="document.getElementById('file').click()">
-    <p style="font-size:32px;margin:0">&#8681;</p>
-    <p><b>Drop processor files here</b> or click to choose</p>
-    <p style="font-size:12px">.xls &middot; .xlsx &middot; .xlsm &mdash; multiple files at once</p>
-    <input type="file" id="file" multiple accept=".xls,.xlsx,.xlsm">
-  </div>
-
-  <div id="actions">
-    <button class="btn" id="dl">&#11015; Download CSV</button>
-    <button class="btn" id="copy" style="background:var(--green)">&#128203; Copy rows for Revenue tab</button>
-  </div>
-
-  <div id="results"></div>
-
-  <p class="note">
-    Handles all three formats automatically (PAI &ldquo;Revenue Details by Device&rdquo;, CDS monthly/TID layouts, Switch ACH).
-    Investor names come from the operating-account lookup baked in (refresh when investors change).
-    Escrow-account rows are excluded automatically; rows with no investor match are flagged <span class="warn">#N/A</span> for review.
-    &ldquo;Copy rows&rdquo; copies tab-separated values (no header) so you can paste directly beneath the existing Revenue tab data.
-  </p>
+<!-- ---- Sidebar ---- -->
+<div class="sidebar">
+  <div class="sidebar-brand">ATM Investors<span>Reports</span></div>
+  <nav class="sidebar-nav">
+    <a href="#ir" class="active" data-view="view-ir">Investor Reports</a>
+    <a href="#daily" data-view="view-daily">Daily Transactions</a>
+  </nav>
 </div>
 
+<!-- ---- Main content ---- -->
+<div class="main"><div class="wrap">
+
+  <!-- =============== VIEW: Investor Reports =============== -->
+  <div id="view-ir" class="view active">
+    <h1>Investor Reports</h1>
+    <p class="sub">Monthly processor pulls, consolidation, and Series 12.</p>
+
+    <div id="lookupStatus" class="status">Loading investor list&hellip;</div>
+
+    <label class="field">Reporting month &mdash; stamps the Date on every converted row
+      <input type="month" id="repMonth">
+    </label>
+
+    <div class="panel">
+      <div class="panel-title">Pull processor reports (PAI / CDS / Switch)</div>
+      <p class="panel-desc">Runs the pulls on the server for the reporting month above, uploads them to Google Drive, then loads them here to consolidate. Enter the team passphrase.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="password" id="pullPass" placeholder="passphrase" style="font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+        <button class="btn" id="runPulls">&#9654;&nbsp; Run Pulls</button>
+        <button class="btn" id="loadPulled" style="background:var(--green);display:none">&#8681;&nbsp; Load &amp; consolidate</button>
+        <span id="pullMsg" style="font-size:12px;color:var(--mut)"></span>
+      </div>
+      <div id="pullManifest" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Series 12 &mdash; Simple Summary (PAI)</div>
+      <p class="panel-desc">Separate from the consolidation above. Pulls the Series 12 Simple Summary from PAI for the reporting month, then hands it back to copy or download &mdash; paste it into the &ldquo;LU - Simple Summary Report&rdquo; tab of the Series 12 breakdown sheet.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="password" id="s12Pass" placeholder="passphrase" style="font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+        <button class="btn" id="runS12">&#9654;&nbsp; Pull Series 12 Simple Summary</button>
+        <span id="s12Msg" style="font-size:12px;color:var(--mut)"></span>
+      </div>
+      <div id="s12Out" style="margin-top:12px;display:none">
+        <div style="display:flex;gap:10px;margin-bottom:6px">
+          <button class="btn" id="s12Copy" style="background:var(--green)">&#128203; Copy</button>
+          <button class="btn" id="s12Dl">&#11015; Download CSV</button>
+        </div>
+        <textarea id="s12Text" readonly onclick="this.select()" style="width:100%;height:220px;font:12px/1.4 monospace;border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
+      </div>
+    </div>
+
+    <div id="drop" onclick="document.getElementById('file').click()">
+      <p style="font-size:32px;margin:0">&#8681;</p>
+      <p><b>Drop processor files here</b> or click to choose</p>
+      <p style="font-size:12px">.xls &middot; .xlsx &middot; .xlsm &mdash; multiple files at once</p>
+      <input type="file" id="file" multiple accept=".xls,.xlsx,.xlsm">
+    </div>
+
+    <div id="actions">
+      <button class="btn" id="dl">&#11015; Download CSV</button>
+      <button class="btn" id="copy" style="background:var(--green)">&#128203; Copy rows for Revenue tab</button>
+    </div>
+
+    <div id="results"></div>
+
+    <p class="note">
+      Handles all three formats automatically (PAI &ldquo;Revenue Details by Device&rdquo;, CDS monthly/TID layouts, Switch ACH).
+      Investor names come from the operating-account lookup baked in (refresh when investors change).
+      Escrow-account rows are excluded automatically; rows with no investor match are flagged <span class="warn">#N/A</span> for review.
+      &ldquo;Copy rows&rdquo; copies tab-separated values (no header) so you can paste directly beneath the existing Revenue tab data.
+    </p>
+  </div>
+
+  <!-- =============== VIEW: Daily Transactions =============== -->
+  <div id="view-daily" class="view">
+    <h1>Daily Transactions</h1>
+    <p class="sub">Fetch daily transaction reports from processor portals and upload them to the watch folder.</p>
+
+    <div class="panel">
+      <div class="panel-title">Fetch &amp; Upload (PAI / CDS / Switch / DNS)</div>
+      <p class="panel-desc">Select a date and processors below. Files are uploaded to the Drive watch folder; the 6 PM n8n automation processes them from there.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <label style="font-size:12px;color:var(--mut);font-weight:600">Date
+          <input type="date" id="dailyDate" style="font:inherit;font-weight:500;color:var(--ink);padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-left:6px">
+        </label>
+      </div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <label style="font-size:13px"><input type="checkbox" id="dailyPAI" checked> PAI</label>
+        <label style="font-size:13px"><input type="checkbox" id="dailyCDS" checked> CDS</label>
+        <label style="font-size:13px"><input type="checkbox" id="dailySwitch" checked> Switch</label>
+        <label style="font-size:13px"><input type="checkbox" id="dailyDNS" checked> DNS</label>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="password" id="dailyPass" placeholder="passphrase" style="font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+        <button class="btn" id="runDaily">&#9654;&nbsp; Fetch &amp; Upload</button>
+        <span id="dailyMsg" style="font-size:12px;color:var(--mut)"></span>
+      </div>
+      <div id="dailyResult" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+</div></div>
+
 <script>
+// ---- Sidebar navigation ----
+(function(){
+  const links = document.querySelectorAll('.sidebar-nav a');
+  function switchView(viewId){
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(viewId).classList.add('active');
+    links.forEach(a => a.classList.toggle('active', a.dataset.view === viewId));
+  }
+  links.forEach(a => a.addEventListener('click', e => { e.preventDefault(); switchView(a.dataset.view); }));
+  // Handle hash on load
+  if(location.hash === '#daily') switchView('view-daily');
+})();
+
 /**
  * W1.3 — Unified PAI + CDS/Switch ACH transform (JavaScript port of validated Python).
  *
@@ -162,14 +216,12 @@ const ESCROW_LAST4 = new Set((
 
 // ----------------------------- helpers -----------------------------
 
-// PAI last4: strip non-digits, take last 4, left-pad to 4 (Python re.sub + zfill).
 function paiLast4(acct) {
   const digits = String(acct == null ? "" : acct).replace(/\D/g, "");
   if (!digits) return "";
   return digits.slice(-4).padStart(4, "0");
 }
 
-// CDS/Switch last4: strip non-digits; if <4 digits keep as-is, else last 4 zero-padded.
 function last4(s) {
   if (s == null) return "";
   const d = String(s).replace(/\D/g, "");
@@ -177,105 +229,47 @@ function last4(s) {
   return d.length >= 4 ? d.slice(-4).padStart(4, "0") : d;
 }
 
-function isNumericAcct(s) {
-  return /\d/.test(String(s == null ? "" : s));
-}
-
-// Python float(v) on a possibly-string cell; non-numeric -> 0.0 (to_f).
-function toF(v) {
-  if (v === null || v === undefined) return 0.0;
-  const n = Number(v);
-  return Number.isNaN(n) ? 0.0 : n;
-}
-
-// Decimal(str(float(x))).quantize(0.01, ROUND_HALF_UP) — round-half-up to 2dp.
+function isNumericAcct(s) { return /\d/.test(String(s == null ? "" : s)); }
+function toF(v) { if (v === null || v === undefined) return 0.0; const n = Number(v); return Number.isNaN(n) ? 0.0 : n; }
 function r2(x) {
-  let n;
-  if (typeof x === "number") n = x;
-  else { n = Number(x); if (Number.isNaN(n)) return x; }
+  let n; if (typeof x === "number") n = x; else { n = Number(x); if (Number.isNaN(n)) return x; }
   if (!Number.isFinite(n)) return x;
-  // Round half away from zero at 2 decimals (matches Python ROUND_HALF_UP for these magnitudes).
-  const sign = n < 0 ? -1 : 1;
-  const scaled = Math.abs(n) * 100;
-  // Nudge to counter binary FP representation before half-up rounding.
-  const rounded = Math.floor(scaled + 0.5 + 1e-9);
-  return sign * rounded / 100;
+  const sign = n < 0 ? -1 : 1; const scaled = Math.abs(n) * 100;
+  const rounded = Math.floor(scaled + 0.5 + 1e-9); return sign * rounded / 100;
 }
-
-// Python str(cell).strip() with pandas-NaN / SheetJS-null handling.
-function sval(cell) {
-  if (cell === null || cell === undefined) return "";
-  return String(cell).trim();
-}
-
-// Stable sort by a list of key-extractors, comparing values the way pandas
-// groupby (sort=True) does: strings lexicographically, numbers numerically.
+function sval(cell) { if (cell === null || cell === undefined) return ""; return String(cell).trim(); }
 function cmpVals(a, b) {
   const an = typeof a === "number", bn = typeof b === "number";
   if (an && bn) return a < b ? -1 : a > b ? 1 : 0;
-  const as = String(a), bs = String(b);
-  return as < bs ? -1 : as > bs ? 1 : 0;
+  const as = String(a), bs = String(b); return as < bs ? -1 : as > bs ? 1 : 0;
 }
 
 function make_row(proc, term, loc, cat, acct, wd, income, code, bill_to) {
-  return {
-    "Bill to Business Code": "",
-    "Processor": proc,
-    "Bill to Business": (bill_to === undefined ? "" : bill_to),
-    "Device Number": term,
-    "Location": loc,
-    "Charge Category": cat,
-    "Account": acct,
-    "Surcharge Withdrawal Transactions": (wd === "" || wd === null || wd === undefined ? "" : Number(wd)),
-    "Business Total Income": income,
-    "Date": DATE_VALUE,
-    "Charge Code Name": code
-  };
+  return { "Bill to Business Code":"", "Processor":proc, "Bill to Business":(bill_to===undefined?"":bill_to),
+    "Device Number":term, "Location":loc, "Charge Category":cat, "Account":acct,
+    "Surcharge Withdrawal Transactions":(wd===""||wd===null||wd===undefined?"":Number(wd)),
+    "Business Total Income":income, "Date":DATE_VALUE, "Charge Code Name":code };
 }
 
 // ----------------------------- PAI -----------------------------
 
-function paiProcName(fn) {
-  const base = fn.replace(/^.*[\\/]/, "");
-  return base.split(/[_ ]raw data/i)[0];
-}
+function paiProcName(fn) { const base = fn.replace(/^.*[\\/]/, ""); return base.split(/[_ ]raw data/i)[0]; }
 
 function parsePAI(filename, rows) {
-  // rows already restricted to the RevenueDetailsByDevice sheet by caller.
-  const proc = paiProcName(filename);
-  const header = rows[0];
-  const hdr = {};
-  header.forEach((name, i) => { hdr[name] = i; });
-  const out = [];
+  const proc = paiProcName(filename); const header = rows[0]; const hdr = {};
+  header.forEach((name, i) => { hdr[name] = i; }); const out = [];
   for (let ri = 1; ri < rows.length; ri++) {
-    const r = rows[ri];
-    if (r == null) continue;
-    if (r.every(c => c === null || c === undefined)) continue;
-    const rawBtb = sval(r[hdr["Bill to Business"]]);
-    const acct4 = paiLast4(r[hdr["Account"]]);
-    let btb;
-    if (rawBtb === "ATM Empire LLC") {
-      btb = "ATM Empire owned";
-    } else if (Object.prototype.hasOwnProperty.call(LOOKUP, acct4)) {
-      btb = LOOKUP[acct4];
-    } else if (ESCROW_LAST4.has(acct4)) {
-      continue; // escrow account — excluded, matches manual process
-    } else {
-      btb = "#N/A";
-    }
-    out.push({
-      "Bill to Business Code": "",
-      "Processor": proc,
-      "Bill to Business": btb,
-      "Device Number": r[hdr["Device Number"]],
-      "Location": r[hdr["Location"]],
-      "Charge Category": r[hdr["Charge Category"]],
-      "Account": acct4,
-      "Surcharge Withdrawal Transactions": "",
-      "Business Total Income": r[hdr["Amount"]],
-      "Date": DATE_VALUE,
-      "Charge Code Name": r[hdr["Charge Code Name"]]
-    });
+    const r = rows[ri]; if (r == null) continue; if (r.every(c => c === null || c === undefined)) continue;
+    const rawBtb = sval(r[hdr["Bill to Business"]]); const acct4 = paiLast4(r[hdr["Account"]]); let btb;
+    if (rawBtb === "ATM Empire LLC") { btb = "ATM Empire owned"; }
+    else if (Object.prototype.hasOwnProperty.call(LOOKUP, acct4)) { btb = LOOKUP[acct4]; }
+    else if (ESCROW_LAST4.has(acct4)) { continue; }
+    else { btb = "#N/A"; }
+    out.push({ "Bill to Business Code":"", "Processor":proc, "Bill to Business":btb,
+      "Device Number":r[hdr["Device Number"]], "Location":r[hdr["Location"]],
+      "Charge Category":r[hdr["Charge Category"]], "Account":acct4,
+      "Surcharge Withdrawal Transactions":"", "Business Total Income":r[hdr["Amount"]],
+      "Date":DATE_VALUE, "Charge Code Name":r[hdr["Charge Code Name"]] });
   }
   return out;
 }
@@ -283,77 +277,50 @@ function parsePAI(filename, rows) {
 // ----------------------------- CDS / Switch -----------------------------
 
 function procToken(filename) {
-  let base = filename.replace(/^.*[\\/]/, "");
-  base = base.replace(/\s+May ACH.*$/i, "");
-  base = base.replace(/\.(xls|xlsx|xlsm)$/i, "");
-  const lower = base.toLowerCase();
+  let base = filename.replace(/^.*[\\/]/, ""); base = base.replace(/\s+May ACH.*$/i, "");
+  base = base.replace(/\.(xls|xlsx|xlsm)$/i, ""); const lower = base.toLowerCase();
   if (lower.startsWith("cds_kevin")) return "CDS_Kevin@";
-  if (lower.startsWith("cds_") || lower.startsWith("switch_")) return base;
-  return "Switch_" + base;
+  if (lower.startsWith("cds_") || lower.startsWith("switch_")) return base; return "Switch_" + base;
 }
 
-// ---- CDS-A ----
 function classifyCds(desc) {
   const d = desc.trim().toLowerCase();
   if (d === "cash") return ["Surcharge", "Txn Surcharge"];
   if (d === "month end") return ["Month End", "Month End"];
-  if (d.startsWith("surcharge")) return ["Surcharge", desc.trim()];
-  return ["Other", desc.trim()];
+  if (d.startsWith("surcharge")) return ["Surcharge", desc.trim()]; return ["Other", desc.trim()];
 }
 
 function parseCdsMonthlyByTerminal(rows, proc) {
   const out = [];
   for (let i = 3; i < rows.length; i++) {
-    const r = rows[i] || [];
-    const term = sval(r[0]);
-    const name = sval(r[1]);
-    const desc = sval(r[2]);
-    const acct = sval(r[5]);
-    if (!term || !desc) continue;
-    const c6 = r[6];
+    const r = rows[i] || []; const term = sval(r[0]); const name = sval(r[1]); const desc = sval(r[2]);
+    const acct = sval(r[5]); if (!term || !desc) continue; const c6 = r[6];
     if (c6 === null || c6 === undefined || (typeof c6 === "number" && Number.isNaN(c6))) continue;
-    const amt = Number(c6);
-    if (Number.isNaN(amt)) continue;
-    const [cat, code] = classifyCds(desc);
-    out.push(make_row(proc, term, name, cat,
-      (isNumericAcct(acct) ? last4(acct) : ""),
-      "", r2(amt), code));
+    const amt = Number(c6); if (Number.isNaN(amt)) continue; const [cat, code] = classifyCds(desc);
+    out.push(make_row(proc, term, name, cat, (isNumericAcct(acct) ? last4(acct) : ""), "", r2(amt), code));
   }
   return out;
 }
 
-// ---- CDS-B ----
 function parseCdsTidWithAccount(rows, proc) {
   const recs = [];
   for (let i = 5; i < rows.length; i++) {
-    const r = rows[i] || [];
-    const acct = sval(r[1]);
-    const desc = sval(r[2]);
-    const term = sval(r[4]);
-    const loc = sval(r[5]);
-    const cash = toF(r[6]);
-    const sur = toF(r[7]);
-    const wd = toF(r[9]);
-    if (!desc || !acct) continue;
-    recs.push({ last4: last4(acct), desc, term, loc, cash, sur, wd });
+    const r = rows[i] || []; const acct = sval(r[1]); const desc = sval(r[2]); const term = sval(r[4]);
+    const loc = sval(r[5]); const cash = toF(r[6]); const sur = toF(r[7]); const wd = toF(r[9]);
+    if (!desc || !acct) continue; recs.push({ last4: last4(acct), desc, term, loc, cash, sur, wd });
   }
   if (recs.length === 0) return [];
-  // groupby(["term","loc","last4","desc"]).agg(sum) — pandas sorts by group keys.
   const groups = new Map();
   for (const rec of recs) {
-    const key = JSON.stringify([rec.term, rec.loc, rec.last4, rec.desc]);
-    let g = groups.get(key);
-    if (!g) { g = { term: rec.term, loc: rec.loc, last4: rec.last4, desc: rec.desc, cash: 0, sur: 0, wd: 0 }; groups.set(key, g); }
+    const key = JSON.stringify([rec.term, rec.loc, rec.last4, rec.desc]); let g = groups.get(key);
+    if (!g) { g = { term:rec.term, loc:rec.loc, last4:rec.last4, desc:rec.desc, cash:0, sur:0, wd:0 }; groups.set(key, g); }
     g.cash += rec.cash; g.sur += rec.sur; g.wd += rec.wd;
   }
   const arr = Array.from(groups.values());
-  arr.sort((a, b) =>
-    cmpVals(a.term, b.term) || cmpVals(a.loc, b.loc) ||
-    cmpVals(a.last4, b.last4) || cmpVals(a.desc, b.desc));
+  arr.sort((a, b) => cmpVals(a.term, b.term) || cmpVals(a.loc, b.loc) || cmpVals(a.last4, b.last4) || cmpVals(a.desc, b.desc));
   const out = [];
   for (const g of arr) {
-    const desc = g.desc; const dl = desc.toLowerCase();
-    let income, cat, code;
+    const desc = g.desc; const dl = desc.toLowerCase(); let income, cat, code;
     if (dl === "cash") { income = g.cash; cat = "Surcharge"; code = "Txn Surcharge"; }
     else if (dl === "month end") { income = g.sur; cat = "Month End"; code = "Month End"; }
     else if (dl.startsWith("surcharge")) { income = g.sur; cat = "Surcharge"; code = desc; }
@@ -363,7 +330,6 @@ function parseCdsTidWithAccount(rows, proc) {
   return out;
 }
 
-// ---- SWITCH ----
 const SWITCH_NOTE_MAP = {
   "driving fees debit": ["Driving Fees Debit", "Driving Fees"],
   "net interchange credit": ["Interchange", "Net Interchange Credit"],
@@ -371,59 +337,34 @@ const SWITCH_NOTE_MAP = {
 };
 
 function parseSwitch(rows, proc) {
-  const recs = [];
-  let cur = "";
-  const n = rows.length;
-  let i = 0;
+  const recs = []; let cur = ""; const n = rows.length; let i = 0;
   while (i < n) {
-    const row = rows[i] || [];
-    const c0 = sval(row[0]);
+    const row = rows[i] || []; const c0 = sval(row[0]);
     if (c0.startsWith("Account:")) { cur = last4(row[12]); i += 1; continue; }
     if (c0 === "Terminal ID") { i += 1; continue; }
     if (/^[A-Z]{2}\d/.test(c0)) {
-      const term = c0;
-      const loc = sval(row[1]);
-      const desc = sval(row[5]);
-      const notes = sval(row[12]);
-      const other = toF(row[19]);
-      const cash = toF(row[18]);
+      const term = c0; const loc = sval(row[1]); const desc = sval(row[5]);
+      const notes = sval(row[12]); const other = toF(row[19]); const cash = toF(row[18]);
       const nl = notes.toLowerCase();
-      if (nl.indexOf("daily cash settlement") !== -1) {
-        recs.push({ term, loc, cat: "Surcharge", acct: cur, code: "Txn Surcharge", amt: cash });
-      } else if (nl.indexOf("monthly surcharge settlement") !== -1 || desc.toLowerCase().indexOf("schg") !== -1) {
-        recs.push({ term, loc, cat: "Surcharge", acct: cur, code: "Txn Surcharge", amt: other });
-      } else if (Object.prototype.hasOwnProperty.call(SWITCH_NOTE_MAP, nl)) {
-        const [cat, code] = SWITCH_NOTE_MAP[nl];
-        recs.push({ term, loc, cat, acct: "1024", code, amt: other });
-      } else {
-        recs.push({ term, loc, cat: "Other Credits/Debits", acct: "1024", code: desc, amt: other });
-      }
+      if (nl.indexOf("daily cash settlement") !== -1) { recs.push({ term, loc, cat: "Surcharge", acct: cur, code: "Txn Surcharge", amt: cash }); }
+      else if (nl.indexOf("monthly surcharge settlement") !== -1 || desc.toLowerCase().indexOf("schg") !== -1) { recs.push({ term, loc, cat: "Surcharge", acct: cur, code: "Txn Surcharge", amt: other }); }
+      else if (Object.prototype.hasOwnProperty.call(SWITCH_NOTE_MAP, nl)) { const [cat, code] = SWITCH_NOTE_MAP[nl]; recs.push({ term, loc, cat, acct: "1024", code, amt: other }); }
+      else { recs.push({ term, loc, cat: "Other Credits/Debits", acct: "1024", code: desc, amt: other }); }
     }
     i += 1;
   }
   if (recs.length === 0) return [];
-  // groupby(["term","loc","cat","acct","code"]).agg(sum) — pandas sorts by group keys.
   const groups = new Map();
   for (const rec of recs) {
-    const key = JSON.stringify([rec.term, rec.loc, rec.cat, rec.acct, rec.code]);
-    let g = groups.get(key);
-    if (!g) { g = { term: rec.term, loc: rec.loc, cat: rec.cat, acct: rec.acct, code: rec.code, amt: 0 }; groups.set(key, g); }
+    const key = JSON.stringify([rec.term, rec.loc, rec.cat, rec.acct, rec.code]); let g = groups.get(key);
+    if (!g) { g = { term:rec.term, loc:rec.loc, cat:rec.cat, acct:rec.acct, code:rec.code, amt:0 }; groups.set(key, g); }
     g.amt += rec.amt;
   }
   const arr = Array.from(groups.values());
-  arr.sort((a, b) =>
-    cmpVals(a.term, b.term) || cmpVals(a.loc, b.loc) || cmpVals(a.cat, b.cat) ||
-    cmpVals(a.acct, b.acct) || cmpVals(a.code, b.code));
+  arr.sort((a, b) => cmpVals(a.term, b.term) || cmpVals(a.loc, b.loc) || cmpVals(a.cat, b.cat) || cmpVals(a.acct, b.acct) || cmpVals(a.code, b.code));
   const out = [];
   for (const g of arr) {
-    // NOTE: the validated Python reference (out_may_cds_switch_converted.csv) has
-    // an entirely BLANK "Bill to Business" for Switch rows. Reason: cds_switch_parser.py's
-    // parse_file() defaults outdir to the INPUT file's directory (/uploads), where the
-    // lookup CSV does not exist, so load_lookup() returns {} and lookup.get(acct,"") -> "".
-    // To faithfully reproduce the reference (and the pipeline as actually run), Bill to
-    // Business is left blank for Switch. The LOOKUP constant is still exported for the
-    // PAI path and available here if the upstream wiring is ever corrected.
-    const SWITCH_BILL_TO = ""; // mirrors as-run Python (empty Switch lookup)
+    const SWITCH_BILL_TO = "";
     out.push(make_row(proc, g.term, g.loc, g.cat, g.acct, "", r2(g.amt), g.code, SWITCH_BILL_TO));
   }
   return out;
@@ -431,41 +372,15 @@ function parseSwitch(rows, proc) {
 
 // ----------------------------- dispatch -----------------------------
 
-function isPAI(filename) {
-  return /(^|[\\/])PAI[_ ]/i.test(filename) || /^PAI[_ ]/i.test(filename.replace(/^.*[\\/]/, ""));
-}
-
-/**
- * transformFile(filename, rows2D) -> array of Revenue-schema objects.
- *
- * rows2D: array-of-arrays exactly as SheetJS sheet_to_json(sheet,{header:1,raw:true})
- *   produces (what n8n "Extract from File" yields with header disabled).
- *   For multi-sheet PAI workbooks, pass the rows of the RevenueDetailsByDevice
- *   sheet (n8n Extract-from-File targets a specific sheet).
- *
- * Reads NO files. Pure function.
- */
 function transformFile(filename, rows2D) {
-  const rows = rows2D || [];
-  const base = filename.replace(/^.*[\\/]/, "");
-
-  // PAI detected by filename prefix.
-  if (/^PAI[_ ]/i.test(base)) {
-    return parsePAI(filename, rows);
-  }
-
-  // CDS / Switch: detect layout from sheet content (mirrors detect_and_parse).
-  const proc = procToken(filename);
-  const a00 = sval(rows[0] && rows[0][0]);
+  const rows = rows2D || []; const base = filename.replace(/^.*[\\/]/, "");
+  if (/^PAI[_ ]/i.test(base)) { return parsePAI(filename, rows); }
+  const proc = procToken(filename); const a00 = sval(rows[0] && rows[0][0]);
   const titleC9 = (rows[0] && rows[0].length > 9) ? sval(rows[0][9]) : "";
-
   if (titleC9.indexOf("Detail by Account") !== -1) return parseSwitch(rows, proc);
   if (a00.indexOf("ACH Monthly Summary By Terminal") === 0) return parseCdsMonthlyByTerminal(rows, proc);
   if (a00.indexOf("ACH Summary by TID") === 0) return parseCdsTidWithAccount(rows, proc);
-  // fallback: any row whose col0 starts with "Account:" -> Switch
-  for (const r of rows) {
-    if (sval(r && r[0]).startsWith("Account:")) return parseSwitch(rows, proc);
-  }
+  for (const r of rows) { if (sval(r && r[0]).startsWith("Account:")) return parseSwitch(rows, proc); }
   throw new Error("Unknown layout: " + filename + " title=" + a00 + "/" + titleC9);
 }
 
@@ -484,7 +399,7 @@ function reportingDate(){
   const ym = (repMonth.value || '').trim();
   if (!/^\d{4}-\d{2}$/.test(ym)) return null;
   const parts = ym.split('-');
-  return parts[1] + '/01/' + parts[0];   // MM/01/YYYY — matches the Revenue tab Date format
+  return parts[1] + '/01/' + parts[0];
 }
 
 // ---- Live investor lookup from Supabase (read-only, RLS-protected) ----
@@ -497,8 +412,7 @@ async function refreshLookup(){
     if (!r.ok) throw new Error("HTTP " + r.status);
     const data = await r.json();
     if (!Array.isArray(data) || !data.length) throw new Error("empty lookup");
-    for (const k in LOOKUP) delete LOOKUP[k];
-    ESCROW_LAST4.clear();
+    for (const k in LOOKUP) delete LOOKUP[k]; ESCROW_LAST4.clear();
     let op = 0, es = 0;
     for (const row of data){
       const l4 = String(row.last4).padStart(4,'0');
@@ -515,12 +429,8 @@ async function refreshLookup(){
 refreshLookup();
 
 function pickSheet(wb, name){
-  if (/^PAI[_ ]/i.test(name)) {
-    const s = wb.SheetNames.find(n => /^RevenueDetailsByDevice/i.test(n));
-    return s || wb.SheetNames[0];
-  }
-  const dad = wb.SheetNames.find(n => n === 'DecryptedACHDetail');
-  return dad || wb.SheetNames[0];
+  if (/^PAI[_ ]/i.test(name)) { const s = wb.SheetNames.find(n => /^RevenueDetailsByDevice/i.test(n)); return s || wb.SheetNames[0]; }
+  const dad = wb.SheetNames.find(n => n === 'DecryptedACHDetail'); return dad || wb.SheetNames[0];
 }
 
 async function handleFiles(fileList){
@@ -528,23 +438,17 @@ async function handleFiles(fileList){
   if (!files.length){ alert('Please drop PAI / CDS / Switch .xls, .xlsx or .xlsm files.'); return; }
   const rd = reportingDate();
   if (!rd){ alert('Please choose a reporting month first.'); return; }
-  DATE_VALUE = rd;   // stamp every converted row's Date with the chosen reporting month
-  ALL_ROWS = [];
-  const perFile = [];
+  DATE_VALUE = rd; ALL_ROWS = []; const perFile = [];
   for (const f of files){
     try {
-      const buf = await f.arrayBuffer();
-      const wb = XLSX.read(buf, { type:'array' });
+      const buf = await f.arrayBuffer(); const wb = XLSX.read(buf, { type:'array' });
       const ws = wb.Sheets[pickSheet(wb, f.name)];
       const rows2D = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
       const out = transformFile(f.name, rows2D);
       const inc = out.reduce((s,r)=> s + (parseFloat(r['Business Total Income'])||0), 0);
       const na = out.filter(r => r['Bill to Business'] === '#N/A').length;
-      ALL_ROWS = ALL_ROWS.concat(out);
-      perFile.push({ name:f.name, rows:out.length, inc, na, err:null });
-    } catch(e){
-      perFile.push({ name:f.name, rows:0, inc:0, na:0, err:String(e.message||e) });
-    }
+      ALL_ROWS = ALL_ROWS.concat(out); perFile.push({ name:f.name, rows:out.length, inc, na, err:null });
+    } catch(e){ perFile.push({ name:f.name, rows:0, inc:0, na:0, err:String(e.message||e) }); }
   }
   render(perFile);
 }
@@ -563,14 +467,12 @@ function render(perFile){
   }
   html += `</tbody><tfoot><tr><th>TOTAL</th><th>${totalRows}</th><th>$${fmt(totalInc)}</th><th>${totalNA}</th></tr></tfoot></table>`;
   if (totalNA>0) html += `<p class="warn">&#9888; ${totalNA} row(s) have no investor match (#N/A) — review these before importing.</p>`;
-  // preview first 25
   html += '<h3>Preview (first 25 rows)</h3><div class="scroll"><table class="prev"><thead><tr>' +
     REV_COLS.map(c=>`<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
   for (const r of ALL_ROWS.slice(0,25)){
     html += '<tr>' + REV_COLS.map(c=>`<td>${esc(r[c]===null||r[c]===undefined?'':r[c])}</td>`).join('') + '</tr>';
   }
-  html += '</tbody></table></div>';
-  results.innerHTML = html;
+  html += '</tbody></table></div>'; results.innerHTML = html;
   actions.style.display = totalRows ? 'flex' : 'none';
 }
 
@@ -578,34 +480,28 @@ function esc(s){ return String(s).replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;',
 
 function toCSV(){
   const q = v => { v = (v===null||v===undefined)?'':String(v); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
-  const lines = [REV_COLS.join(',')];
-  for (const r of ALL_ROWS) lines.push(REV_COLS.map(c=>q(r[c])).join(','));
+  const lines = [REV_COLS.join(',')]; for (const r of ALL_ROWS) lines.push(REV_COLS.map(c=>q(r[c])).join(','));
   return lines.join('\n');
 }
-function toTSV(){ // no header — paste under existing Revenue rows
+function toTSV(){
   return ALL_ROWS.map(r => REV_COLS.map(c => {
     let v=(r[c]===null||r[c]===undefined)?'':String(r[c]); return v.replace(/\t/g,' ').replace(/\n/g,' ');
   }).join('\t')).join('\n');
 }
 
 document.getElementById('dl').onclick = () => {
-  const blob = new Blob([toCSV()], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'IR_converted_revenue.csv';
-  a.click();
+  const blob = new Blob([toCSV()], {type:'text/csv'}); const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'IR_converted_revenue.csv'; a.click();
 };
 document.getElementById('copy').onclick = async () => {
   await navigator.clipboard.writeText(toTSV());
   const b=document.getElementById('copy'); const t=b.textContent; b.textContent='Copied!'; setTimeout(()=>b.textContent=t,1500);
 };
 
-// ---- Manual pull trigger (calls this app's server, which holds the VPS token) ----
-const pullPass = document.getElementById('pullPass');
-const pullMsg = document.getElementById('pullMsg');
-const pullManifest = document.getElementById('pullManifest');
-const runPullsBtn = document.getElementById('runPulls');
-const loadPulledBtn = document.getElementById('loadPulled');
+// ---- Manual pull trigger ----
+const pullPass = document.getElementById('pullPass'), pullMsg = document.getElementById('pullMsg'),
+      pullManifest = document.getElementById('pullManifest'), runPullsBtn = document.getElementById('runPulls'),
+      loadPulledBtn = document.getElementById('loadPulled');
 function ymNow(){ const ym=(repMonth.value||'').trim(); return /^\d{4}-\d{2}$/.test(ym)?ym:null; }
 function setPullMsg(t, cls){ pullMsg.textContent=t; pullMsg.style.color = cls==='err'?'#c0392b':(cls==='ok'?'#1a7f37':'#6b7280'); }
 
@@ -613,16 +509,16 @@ runPullsBtn.onclick = async () => {
   const ym = ymNow(); if(!ym){ alert('Choose a reporting month first.'); return; }
   if(!pullPass.value){ alert('Enter the passphrase.'); return; }
   runPullsBtn.disabled = true; loadPulledBtn.style.display='none'; pullManifest.innerHTML='';
-  setPullMsg('Starting pull…');
+  setPullMsg('Starting pull\u2026');
   try {
     const r = await fetch('/run-pulls', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ passphrase: pullPass.value, ym }) });
     if (r.status===401){ setPullMsg('Wrong passphrase.','err'); runPullsBtn.disabled=false; return; }
     if (r.status!==202 && r.status!==409 && !r.ok){ const j=await r.json().catch(()=>({})); setPullMsg('Could not start: '+(j.error||r.status),'err'); runPullsBtn.disabled=false; return; }
-    setPullMsg('Pull running… this can take a few minutes.');
+    setPullMsg('Pull running\u2026 this can take a few minutes.');
     await pollUntilDone();
     await showManifest(ym);
-    setPullMsg('Pull finished — review the files below, then Load & consolidate.','ok');
+    setPullMsg('Pull finished \u2014 review the files below, then Load & consolidate.','ok');
     loadPulledBtn.style.display='inline-block';
   } catch(e){ setPullMsg('Error: '+(e.message||e),'err'); }
   runPullsBtn.disabled = false;
@@ -651,8 +547,7 @@ async function showManifest(ym){
 loadPulledBtn.onclick = async () => {
   const ym = ymNow(); const rd = reportingDate();
   if(!ym || !rd){ alert('Choose a reporting month first.'); return; }
-  DATE_VALUE = rd;
-  setPullMsg('Loading pulled files…');
+  DATE_VALUE = rd; setPullMsg('Loading pulled files\u2026');
   try {
     const lr = await fetch('/pull-files?ym='+encodeURIComponent(ym)); const lj = await lr.json();
     const list = (lj.files||[]);
@@ -661,23 +556,20 @@ loadPulledBtn.onclick = async () => {
     for (const f of list){
       try {
         const fr = await fetch('/pull-file?ym='+encodeURIComponent(ym)+'&proc='+encodeURIComponent(f.proc)+'&name='+encodeURIComponent(f.name));
-        const buf = await fr.arrayBuffer();
-        const wb = XLSX.read(buf,{type:'array'});
+        const buf = await fr.arrayBuffer(); const wb = XLSX.read(buf,{type:'array'});
         const ws = wb.Sheets[pickSheet(wb, f.name)];
         const rows2D = XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
         const out = transformFile(f.name, rows2D);
         const inc = out.reduce((s,r)=>s+(parseFloat(r['Business Total Income'])||0),0);
         const na = out.filter(r=>r['Bill to Business']==='#N/A').length;
-        ALL_ROWS = ALL_ROWS.concat(out);
-        perFile.push({name:f.name, rows:out.length, inc, na, err:null});
+        ALL_ROWS = ALL_ROWS.concat(out); perFile.push({name:f.name, rows:out.length, inc, na, err:null});
       } catch(e){ perFile.push({name:f.name, rows:0, inc:0, na:0, err:String(e.message||e)}); }
     }
-    render(perFile);
-    setPullMsg('Consolidated '+list.length+' pulled file(s).','ok');
+    render(perFile); setPullMsg('Consolidated '+list.length+' pulled file(s).','ok');
   } catch(e){ setPullMsg('Load error: '+(e.message||e),'err'); }
 };
 
-// ---- Series 12 Simple Summary pull (calls this app's server, which holds the VPS token) ----
+// ---- Series 12 Simple Summary ----
 const s12Pass=document.getElementById('s12Pass'), s12Msg=document.getElementById('s12Msg'),
       runS12=document.getElementById('runS12'), s12Out=document.getElementById('s12Out'),
       s12Text=document.getElementById('s12Text');
@@ -686,19 +578,19 @@ function setS12(t,cls){ s12Msg.textContent=t; s12Msg.style.color = cls==='err'?'
 runS12.onclick = async () => {
   const ym = ymNow(); if(!ym){ alert('Choose a reporting month first.'); return; }
   if(!s12Pass.value){ alert('Enter the passphrase.'); return; }
-  runS12.disabled=true; s12Out.style.display='none'; setS12('Starting Series 12 pull…');
+  runS12.disabled=true; s12Out.style.display='none'; setS12('Starting Series 12 pull\u2026');
   try {
     const r = await fetch('/series12-summary',{ method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ passphrase:s12Pass.value, ym }) });
     if (r.status===401){ setS12('Wrong passphrase.','err'); runS12.disabled=false; return; }
     if (r.status!==202 && r.status!==409 && !r.ok){ const j=await r.json().catch(()=>({})); setS12('Could not start: '+(j.error||r.status),'err'); runS12.disabled=false; return; }
-    setS12('Pulling from PAI… this can take a minute.');
+    setS12('Pulling from PAI\u2026 this can take a minute.');
     await s12PollDone();
     const fr = await fetch('/series12-summary-file?ym='+encodeURIComponent(ym));
     const fj = await fr.json().catch(()=>({}));
     if (!fr.ok || !fj.ok || !fj.csv){ setS12('Pull finished but no file came back: '+(fj.error||fr.status)+'. Try again in a moment.','err'); runS12.disabled=false; return; }
     S12_CSV = fj.csv; s12Text.value = S12_CSV; s12Out.style.display='block';
-    setS12('Done — copy this into the LU - Simple Summary Report tab.','ok');
+    setS12('Done \u2014 copy this into the LU - Simple Summary Report tab.','ok');
   } catch(e){ setS12('Error: '+(e.message||e),'err'); }
   runS12.disabled=false;
 };
@@ -710,31 +602,20 @@ function s12PollDone(){
     }, 4000);
   });
 }
-// PAI's Simple Summary CSV quotes fields (some hold commas, e.g. "$2,215.03").
-// Parse it properly and copy as TAB-separated so it pastes straight into the LU
-// tab as clean columns — no "split by comma" step, and comma-dollar values stay intact.
 function s12ParseCSV(text){
   const rows=[]; let row=[], field='', i=0, inq=false;
   while(i<text.length){
     const c=text[i];
-    if(inq){
-      if(c==='"'){ if(text[i+1]==='"'){ field+='"'; i+=2; continue; } inq=false; i++; continue; }
-      field+=c; i++; continue;
-    }
-    if(c==='"'){ inq=true; i++; continue; }
-    if(c===','){ row.push(field); field=''; i++; continue; }
-    if(c==='\r'){ i++; continue; }
-    if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
+    if(inq){ if(c==='"'){ if(text[i+1]==='"'){ field+='"'; i+=2; continue; } inq=false; i++; continue; } field+=c; i++; continue; }
+    if(c==='"'){ inq=true; i++; continue; } if(c===','){ row.push(field); field=''; i++; continue; }
+    if(c==='\r'){ i++; continue; } if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
     field+=c; i++;
   }
-  if(field!=='' || row.length){ row.push(field); rows.push(row); }
-  return rows;
+  if(field!=='' || row.length){ row.push(field); rows.push(row); } return rows;
 }
 function s12ToTSV(text){
-  return s12ParseCSV(text)
-    .filter(r => r.length && r.some(f => String(f).trim() !== ''))
-    .map(r => r.map(f => String(f).replace(/[\t\r\n]/g,' ')).join('\t'))
-    .join('\n');
+  return s12ParseCSV(text).filter(r => r.length && r.some(f => String(f).trim() !== ''))
+    .map(r => r.map(f => String(f).replace(/[\t\r\n]/g,' ')).join('\t')).join('\n');
 }
 document.getElementById('s12Copy').onclick = async () => {
   await navigator.clipboard.writeText(s12ToTSV(S12_CSV));
@@ -757,7 +638,6 @@ fileInput.addEventListener('change', e => handleFiles(e.target.files));
   const dailyResult = document.getElementById('dailyResult');
   const runDailyBtn = document.getElementById('runDaily');
   const dailyPass = document.getElementById('dailyPass');
-  // Default to yesterday
   const yd = new Date(); yd.setDate(yd.getDate()-1);
   dailyDate.value = yd.getFullYear()+'-'+String(yd.getMonth()+1).padStart(2,'0')+'-'+String(yd.getDate()).padStart(2,'0');
 
@@ -779,14 +659,14 @@ fileInput.addEventListener('change', e => handleFiles(e.target.files));
     const procs = selectedProcessors();
     if(!procs.length){ alert('Select at least one processor.'); return; }
     runDailyBtn.disabled=true; dailyResult.innerHTML='';
-    setDailyMsg('Starting daily pull…');
+    setDailyMsg('Starting daily pull\u2026');
     try {
       const r = await fetch('/run-daily', { method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ passphrase:dailyPass.value, date, only:procs.join(',') }) });
       if(r.status===401){ setDailyMsg('Wrong passphrase.','err'); runDailyBtn.disabled=false; return; }
       const j = await r.json().catch(()=>({}));
       if(r.status!==202){ setDailyMsg('Could not start: '+(j.error||r.status),'err'); runDailyBtn.disabled=false; return; }
-      setDailyMsg('Running… this can take a few minutes.');
+      setDailyMsg('Running\u2026 this can take a few minutes.');
       await pollDailyDone();
       setDailyMsg('Daily pull finished.','ok');
       await showDailyResult(date);
@@ -797,10 +677,8 @@ fileInput.addEventListener('change', e => handleFiles(e.target.files));
   function pollDailyDone(){
     return new Promise(resolve=>{
       const t=setInterval(async()=>{
-        try {
-          const r=await fetch('/daily-status'); const j=await r.json();
-          if(j.state && j.state.running===false){ clearInterval(t); resolve(); }
-        } catch(e){}
+        try { const r=await fetch('/daily-status'); const j=await r.json();
+          if(j.state && j.state.running===false){ clearInterval(t); resolve(); } } catch(e){}
       },4000);
     });
   }
@@ -813,25 +691,18 @@ fileInput.addEventListener('change', e => handleFiles(e.target.files));
       let html='<table class="sum"><thead><tr><th>Processor</th><th>Login</th><th>Status</th><th>Detail</th></tr></thead><tbody>';
       let hasRows=false;
       for(const p of ['PAI','CDS','Switch','DNS']){
-        const pr=j.processors&&j.processors[p];
-        if(!pr) continue;
+        const pr=j.processors&&j.processors[p]; if(!pr) continue;
         const logins=pr.logins||[];
-        if(!logins.length){
-          html+='<tr><td>'+p+'</td><td colspan="3" style="color:var(--mut)">skipped</td></tr>';
-          hasRows=true;
-          continue;
-        }
+        if(!logins.length){ html+='<tr><td>'+p+'</td><td colspan="3" style="color:var(--mut)">skipped</td></tr>'; hasRows=true; continue; }
         for(const l of logins){
-          hasRows=true;
-          const ok=l.status==='ok';
+          hasRows=true; const ok=l.status==='ok';
           const badge=ok?'<span style="color:var(--green)">&#10003; ok</span>':'<span class="err">&#10007; fail</span>';
           const detail=ok?(l.file||''):'<span class="err">'+esc(l.error||'unknown error')+'</span>';
           html+='<tr><td>'+p+'</td><td>'+esc(l.login)+'</td><td>'+badge+'</td><td style="font-size:12px">'+detail+'</td></tr>';
         }
       }
       if(!hasRows) html+='<tr><td colspan="4" style="color:var(--mut)">No results</td></tr>';
-      html+='</tbody></table>';
-      dailyResult.innerHTML=html;
+      html+='</tbody></table>'; dailyResult.innerHTML=html;
     } catch(e){ dailyResult.innerHTML='<span class="err">'+esc(String(e.message||e))+'</span>'; }
   }
 })();
