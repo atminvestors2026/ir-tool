@@ -111,7 +111,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);
   } catch (e) {
-    json(res, 502, { error: 'could not reach the pull server', detail: String(e) });
+    json(res, 502, { error: 'could not reach the pull server', detail: e && e.errors ? e.errors.map(x => (x.code || x) + '@' + (x.address || '?')).join(', ') : String(e) });
   }
 });
 server.listen(port, () => console.log('IR tool serving on ' + port));
