@@ -244,8 +244,8 @@ function cmpVals(a, b) {
   const as = String(a), bs = String(b); return as < bs ? -1 : as > bs ? 1 : 0;
 }
 
-function make_row(proc, term, loc, cat, acct, wd, income, code, bill_to) {
-  return { "Bill to Business Code":"", "Processor":proc, "Bill to Business":(bill_to===undefined?"":bill_to),
+function resolveBillTo(acct) { const k = last4(acct); if (!k) return "#N/A"; return Object.prototype.hasOwnProperty.call(LOOKUP, k) ? LOOKUP[k] : "#N/A"; }function make_row(proc, term, loc, cat, acct, wd, income, code, bill_to) {
+  return { "Bill to Business Code":"", "Processor":proc, "Bill to Business":(bill_to===undefined?resolveBillTo(acct):bill_to),
     "Device Number":term, "Location":loc, "Charge Category":cat, "Account":acct,
     "Surcharge Withdrawal Transactions":(wd===""||wd===null||wd===undefined?"":Number(wd)),
     "Business Total Income":income, "Date":DATE_VALUE, "Charge Code Name":code };
@@ -365,7 +365,7 @@ function parseSwitch(rows, proc) {
   const out = [];
   for (const g of arr) {
     const SWITCH_BILL_TO = "";
-    out.push(make_row(proc, g.term, g.loc, g.cat, g.acct, "", r2(g.amt), g.code, SWITCH_BILL_TO));
+    out.push(make_row(proc, g.term, g.loc, g.cat, g.acct, "", r2(g.amt), g.code));
   }
   return out;
 }
