@@ -23,7 +23,7 @@
   .main{margin-left:var(--sidebar-w);padding:32px;min-height:100vh}
   .main .wrap{max-width:960px;margin:0 auto}
   .view{display:none}
-  .view.active{display:block}
+  .view.active{display:block} #view-ir.active{display:flex;flex-direction:column} #view-ir>#drop,#view-ir>#actions,#view-ir>#results{order:1} #view-ir>.panel+.panel{order:2} #view-ir>.note{order:3}
 
   /* ---- existing component styles ---- */
   h1{font-size:22px;margin:0 0 4px}
