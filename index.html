@@ -126,7 +126,7 @@
     <p class="note">
       Handles all three formats automatically (PAI &ldquo;Revenue Details by Device&rdquo;, CDS monthly/TID layouts, Switch ACH).
       Investor names come from the operating-account lookup baked in (refresh when investors change).
-      Escrow-account rows are excluded automatically; rows with no investor match are flagged <span class="warn">#N/A</span> for review.
+      Escrow-account rows are excluded automatically; rows with no investor match are flagged <span class="warn">No investor match</span> for review.
       &ldquo;Copy rows&rdquo; copies tab-separated values (no header) so you can paste directly beneath the existing Revenue tab data.
     </p>
   </div>
@@ -459,14 +459,14 @@ function render(perFile){
   const totalRows = ALL_ROWS.length;
   const totalInc = ALL_ROWS.reduce((s,r)=> s + (parseFloat(r['Business Total Income'])||0), 0);
   const totalNA = ALL_ROWS.filter(r => r['Bill to Business']==='No investor match').length;
-  let html = '<table class="sum"><thead><tr><th>File</th><th>Rows</th><th>Income</th><th>#N/A</th></tr></thead><tbody>';
+  let html = '<table class="sum"><thead><tr><th>File</th><th>Rows</th><th>Income</th><th>No investor match</th></tr></thead><tbody>';
   for (const p of perFile){
     html += '<tr>' + (p.err
       ? `<td>${esc(p.name)}</td><td colspan="3" class="err">ERROR: ${esc(p.err)}</td>`
       : `<td>${esc(p.name)}</td><td>${p.rows}</td><td>$${fmt(p.inc)}</td><td>${p.na?('<span class="warn">'+p.na+'</span>'):'0'}</td>`) + '</tr>';
   }
   html += `</tbody><tfoot><tr><th>TOTAL</th><th>${totalRows}</th><th>$${fmt(totalInc)}</th><th>${totalNA}</th></tr></tfoot></table>`;
-  if (totalNA>0) html += `<p class="warn">&#9888; ${totalNA} row(s) have no investor match (#N/A) — review these before importing.</p>`;
+  if (totalNA>0) html += `<p class="warn">&#9888; ${totalNA} row(s) have no investor match (No investor match) — review these before importing.</p>`;
   html += '<h3>Preview (first 25 rows)</h3><div class="scroll"><table class="prev"><thead><tr>' +
     REV_COLS.map(c=>`<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
   for (const r of ALL_ROWS.slice(0,25)){
