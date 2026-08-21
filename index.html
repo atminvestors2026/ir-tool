@@ -244,7 +244,7 @@ function cmpVals(a, b) {
   const as = String(a), bs = String(b); return as < bs ? -1 : as > bs ? 1 : 0;
 }
 
-function resolveBillTo(acct) { const k = last4(acct); if (!k) return "#N/A"; return Object.prototype.hasOwnProperty.call(LOOKUP, k) ? LOOKUP[k] : "#N/A"; }function make_row(proc, term, loc, cat, acct, wd, income, code, bill_to) {
+function resolveBillTo(acct) { const k = last4(acct); if (!k) return "No account number"; return Object.prototype.hasOwnProperty.call(LOOKUP, k) ? LOOKUP[k] : "No investor match"; }function make_row(proc, term, loc, cat, acct, wd, income, code, bill_to) {
   return { "Bill to Business Code":"", "Processor":proc, "Bill to Business":(bill_to===undefined?resolveBillTo(acct):bill_to),
     "Device Number":term, "Location":loc, "Charge Category":cat, "Account":acct,
     "Surcharge Withdrawal Transactions":(wd===""||wd===null||wd===undefined?"":Number(wd)),
@@ -264,7 +264,7 @@ function parsePAI(filename, rows) {
     if (rawBtb === "ATM Empire LLC") { btb = "ATM Empire owned"; }
     else if (Object.prototype.hasOwnProperty.call(LOOKUP, acct4)) { btb = LOOKUP[acct4]; }
     else if (ESCROW_LAST4.has(acct4)) { continue; }
-    else { btb = "#N/A"; }
+    else { btb = "No investor match"; }
     out.push({ "Bill to Business Code":"", "Processor":proc, "Bill to Business":btb,
       "Device Number":r[hdr["Device Number"]], "Location":r[hdr["Location"]],
       "Charge Category":r[hdr["Charge Category"]], "Account":acct4,
@@ -446,7 +446,7 @@ async function handleFiles(fileList){
       const rows2D = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
       const out = transformFile(f.name, rows2D);
       const inc = out.reduce((s,r)=> s + (parseFloat(r['Business Total Income'])||0), 0);
-      const na = out.filter(r => r['Bill to Business'] === '#N/A').length;
+      const na = out.filter(r => r['Bill to Business'] === 'No investor match').length;
       ALL_ROWS = ALL_ROWS.concat(out); perFile.push({ name:f.name, rows:out.length, inc, na, err:null });
     } catch(e){ perFile.push({ name:f.name, rows:0, inc:0, na:0, err:String(e.message||e) }); }
   }
@@ -458,7 +458,7 @@ function fmt(n){ return n.toLocaleString('en-US',{minimumFractionDigits:2, maxim
 function render(perFile){
   const totalRows = ALL_ROWS.length;
   const totalInc = ALL_ROWS.reduce((s,r)=> s + (parseFloat(r['Business Total Income'])||0), 0);
-  const totalNA = ALL_ROWS.filter(r => r['Bill to Business']==='#N/A').length;
+  const totalNA = ALL_ROWS.filter(r => r['Bill to Business']==='No investor match').length;
   let html = '<table class="sum"><thead><tr><th>File</th><th>Rows</th><th>Income</th><th>#N/A</th></tr></thead><tbody>';
   for (const p of perFile){
     html += '<tr>' + (p.err
@@ -561,7 +561,7 @@ loadPulledBtn.onclick = async () => {
         const rows2D = XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
         const out = transformFile(f.name, rows2D);
         const inc = out.reduce((s,r)=>s+(parseFloat(r['Business Total Income'])||0),0);
-        const na = out.filter(r=>r['Bill to Business']==='#N/A').length;
+        const na = out.filter(r=>r['Bill to Business']==='No investor match').length;
         ALL_ROWS = ALL_ROWS.concat(out); perFile.push({name:f.name, rows:out.length, inc, na, err:null});
       } catch(e){ perFile.push({name:f.name, rows:0, inc:0, na:0, err:String(e.message||e)}); }
     }
